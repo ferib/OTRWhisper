@@ -1,0 +1,8 @@
+## Interface: 10000
+## Title: |cff00FAF6OTR|cffFF7EFFWhisper
+## Version: v0.0.1
+## Author: Ferib Hellscream
+## Notes: Add |cff00FAF6OTR|r to your |cffFF7EFFwhispers|r!
+## LoadManagers: AddonLoader
+
+OTRWhisper.lua
