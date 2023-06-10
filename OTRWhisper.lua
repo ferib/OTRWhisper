@@ -1,402 +1,330 @@
-C_Timer.After(0, function()
+local addonPrefix = "OTRWhisper" .. "0";
 
-   local addonPrefix = "OTRWhisper" .. "0";
+local chatFrames = {} -- temp?
 
-   C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
+-- poor symetric encryption
+local function encryptDecrypt(data, key)
+   local encrypted = ""
+   local keyLength = #key
+   local dataIndex = 1
 
-   -- poor symetric encryption
-   local function encryptDecrypt(data, key)
-      local encrypted = ""
-      local keyLength = #key
-      local dataIndex = 1
+   for i = 1, #data do
+         local byte = string.byte(data, i)
+         local keyByte = string.byte(key, dataIndex)
 
-      for i = 1, #data do
-            local byte = string.byte(data, i)
-            local keyByte = string.byte(key, dataIndex)
+         local encryptedByte = bit.bxor(byte, keyByte)
+         encrypted = encrypted .. string.char(encryptedByte)
 
-            local encryptedByte = bit.bxor(byte, keyByte)
-            encrypted = encrypted .. string.char(encryptedByte)
-
-            dataIndex = dataIndex + 1
-            if dataIndex > keyLength then
-               dataIndex = 1
-            end
-      end
-
-      return encrypted
+         dataIndex = dataIndex + 1
+         if dataIndex > keyLength then
+            dataIndex = 1
+         end
    end
 
-  -- wrapper, soonTM
-   local function encrypt(string, key)
-      return encryptDecrypt(string, tostring(key))
+   return encrypted
+end
+
+-- wrapper, soonTM
+local function encrypt(string, key)
+   return encryptDecrypt(string, tostring(key))
+end
+
+local function decrypt(string, key)
+   return encryptDecrypt(string, tostring(key))
+end
+
+local function takeNameFromPlayername(playername)
+    local t={}
+    for str in string.gmatch(playername, "([^"..'-'.."]+)") do
+        table.insert(t, str)
+    end
+    return t[1] or playername
+end
+
+ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
+   -- NOTE: see ChatFrame_MessageEventHandler
+   --chatFrame:GetScript("OnEvent")(chatFrame, event, ...); -- TODO: Fire the event for the frame.
+
+   if ( chatFrame.privateMessageList and not chatFrame.privateMessageList[strlower(takeNameFromPlayername(sender))] ) then
+      return;
+   elseif ( chatFrame.excludePrivateMessageList and chatFrame.excludePrivateMessageList[strlower(takeNameFromPlayername(sender))] ) then
+      return;
    end
 
-   local function decrypt(string, key)
-      return encryptDecrypt(string, tostring(key))
-   end
+    local arg1 = message
+    local arg2, arg11, arg13 = arg2, 0, 0
+    local msgTime = time();
+    local playerName, lineID, bnetIDAccount = arg2, arg11, arg13;
 
-   local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
-      -- NOTE: see ChatFrame_MessageEventHandler
-      --chatFrame:GetScript("OnEvent")(chatFrame, event, ...); -- TODO: Fire the event for the frame.
-
-      if ( chatFrame.privateMessageList and not chatFrame.privateMessageList[strlower(sender)] ) then
-         return;
-      elseif ( chatFrame.excludePrivateMessageList and chatFrame.excludePrivateMessageList[strlower(sender)] ) then
-         return;
-      end
-
-      local arg1 = message
-      local arg2, arg11, arg13 = arg2, 0, 0
-      local msgTime = time();
-      local playerName, lineID, bnetIDAccount = arg2, arg11, arg13;
-
-      local function MessageFormatter(msg)
-         local fontHeight = select(2, FCF_GetChatWindowInfo(chatFrame:GetID()));
-         if ( fontHeight == 0 ) then
+    local function MessageFormatter(msg)
+        local fontHeight = select(2, FCF_GetChatWindowInfo(chatFrame:GetID()));
+        if ( fontHeight == 0 ) then
             fontHeight = 14;
-         end
+        end
 
-         -- Add AFK/DND flags
-         local pflag = "<OTR>" --GetPFlag(arg6, arg7, arg8); -- NONE?
+        -- Add AFK/DND flags
+        local pflag = "<OTR>" --GetPFlag(arg6, arg7, arg8); -- NONE?
 
-         local showLink = 1;
-         msg = gsub(msg, "%%", "%%%%");
+        local showLink = 1;
+        msg = gsub(msg, "%%", "%%%%");
 
-         -- Search for icon links and replace them with texture links.
-         --msg = C_ChatInfo.ReplaceIconAndGroupExpressions(msg, false, not ChatFrame_CanChatGroupPerformExpressionExpansion("WHISPER"));
+        -- Search for icon links and replace them with texture links.
+        --msg = C_ChatInfo.ReplaceIconAndGroupExpressions(msg, false, not ChatFrame_CanChatGroupPerformExpressionExpansion("WHISPER"));
 
-         --Remove groups of many spaces
-         msg = RemoveExtraSpaces(msg);
+        --Remove groups of many spaces
+        msg = RemoveExtraSpaces(msg);
 
-         --local playerLink = "[|cffffffff" .. sender .. "|r]";
-         local playerLink = GetPlayerLink(sender, sender, 0, "WHISPER", sender)
-         local playerLinkDisplayText = coloredName;
-         local relevantDefaultLanguage = chatFrame.defaultLanguage;
+        -- NOTE: No GUID so no colors?
+        --local playerLink = "[|cffffffff" .. sender .. "|r]";
+        local playerLink = "[|cff222222" .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
+        local playerLinkDisplayText = coloredName;
+        local relevantDefaultLanguage = chatFrame.defaultLanguage;
 
-         local message = msg;
-         
-         local outMsg = format(_G["CHAT_WHISPER_GET"] .. message, pflag .. playerLink);
+        local message = msg;
 
-         --Add Timestamps
-         local chatTimestampFmt = GetChatTimestampFormat();
-         if ( chatTimestampFmt ) then
+        local outMsg;
+        if isSender then
+            outMsg = format(_G["CHAT_WHISPER_INFORM_GET"] .. message, pflag .. playerLink);
+        else
+            outMsg = format(_G["CHAT_WHISPER_GET"] .. message, pflag .. playerLink);
+        end
+
+        --Add Timestamps
+        local chatTimestampFmt = GetChatTimestampFormat();
+        if ( chatTimestampFmt ) then
             outMsg = BetterDate(chatTimestampFmt, msgTime)..outMsg;
-         end
-         
-         return outMsg;
-      end
+        end
 
-      local isChatLineCensored = C_ChatInfo.IsChatLineCensored(lineID);
-      
-      --local msg = isChatLineCensored and arg1 or MessageFormatter(arg1);
-      local msg = MessageFormatter(arg1)
-      print("TEST: " .. msg)
+        return outMsg;
+    end
 
-      local accessID = ChatHistory_GetAccessID("WHISPER", sender);
+    local isChatLineCensored = C_ChatInfo.IsChatLineCensored(lineID);
 
-      local arg12 = nil -- ?
-      local typeID = ChatHistory_GetAccessID("WHISPER", sender, arg12 or arg13);
-      
-      -- The message formatter is captured so that the original message can be reformatted when a censored message
-      -- is approved to be shown. We only need to pack the event args if the line was censored, as the message transformation
-      -- step is the only code that needs these arguments. See ItemRef.lua "censoredmessage".
-      local eventArgs = {};
-      --if isChatLineCensored then
-      --	eventArgs = SafePack(...);
-      --end
+    --local msg = isChatLineCensored and arg1 or MessageFormatter(arg1);
+    local msg = MessageFormatter(arg1)
+    --print("TEST: " .. msg)
 
-      -- flashing?
+    local accessID = ChatHistory_GetAccessID("WHISPER", takeNameFromPlayername(sender));
 
-      ChatEdit_SetLastTellTarget(sender, "WHISPER");
+    local arg12 = nil -- ?
+    local typeID = ChatHistory_GetAccessID("WHISPER", takeNameFromPlayername(sender), arg12 or arg13);
 
-      if ( not chatFrame.tellTimer or (GetTime() > chatFrame.tellTimer) ) then
-         PlaySound(SOUNDKIT.TELL_MESSAGE);
-      end
-      chatFrame.tellTimer = GetTime() + CHAT_TELL_ALERT_TIME;
-      --FCF_FlashTab(self);
-      FlashClientIcon();
+    -- The message formatter is captured so that the original message can be reformatted when a censored message
+    -- is approved to be shown. We only need to pack the event args if the line was censored, as the message transformation
+    -- step is the only code that needs these arguments. See ItemRef.lua "censoredmessage".
+    local eventArgs = {};
+    --if isChatLineCensored then
+    --	eventArgs = SafePack(...);
+    --end
 
-      local info = ChatTypeInfo["WHISPER"];
-      -- this is NIL?
-      --FlashTabIfNotShown(chatFrame, info, "WHISPER", "WHISPER", sender);
-      chatFrame:AddMessage(msg, info.r, info.g, info.b, info.id, accessID, typeID, "CHAT_MSG_WHISPER", eventArgs, MessageFormatter);
-   end
+    -- flashing?
 
-   local function spoofOTRWhisper(message, sender, isSender)
+    ChatEdit_SetLastTellTarget(takeNameFromPlayername(sender), "WHISPER");
 
-      -- NOTE: see FloatingChatFrameManager_OnEvent
-      if FCFManager_GetNumDedicatedFrames("WHISPER", sender) == 0 then
-         -- make new frame if needed?
-         local chatFrame = FCF_OpenTemporaryWindow("WHISPER", sender);
-         SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
-         
-         if isSender then
+    if ( not chatFrame.tellTimer or (GetTime() > chatFrame.tellTimer) ) then
+        PlaySound(SOUNDKIT.TELL_MESSAGE);
+    end
+    chatFrame.tellTimer = GetTime() + CHAT_TELL_ALERT_TIME;
+    --FCF_FlashTab(self);
+    FlashClientIcon();
+
+    local info = ChatTypeInfo["WHISPER"];
+    -- this is NIL?
+    --FlashTabIfNotShown(chatFrame, info, "WHISPER", "WHISPER", sender);
+    chatFrame:AddMessage(msg, info.r, info.g, info.b, info.id, accessID, typeID, "CHAT_MSG_WHISPER", eventArgs, MessageFormatter);
+end
+
+local function spoofOTRWhisper(message, sender, isSender)
+
+    -- NOTE: see FloatingChatFrameManager_OnEvent
+    if FCFManager_GetNumDedicatedFrames("WHISPER", takeNameFromPlayername(sender)) == 0 then
+        -- make new frame if needed?
+        local chatFrame = FCF_OpenTemporaryWindow("WHISPER", takeNameFromPlayername(sender));
+        chatFrames[takeNameFromPlayername(sender)] = chatFrame -- NOTE tmp way to keep track of the frame?
+        SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
+
+        if isSender then
             FCF_SelectDockFrame(chatFrame);
             FCF_FadeInChatFrame(chatFrame);
-         end
-      else
-         -- stop flashing
-         FCFManager_StopFlashOnDedicatedWindows("WHISPER", sender);
-      
-         local chatFrame = nil -- FCFManager_GetChatTarget("WHISPER", sender, UnitName("player"))
-         -- NOTE: there is no way to obtain the chat window from the `dedicatedWindows`?
-         if chatFrame == nil then
-            print("No chat whisper frame found?")
+        else
+            FCF_FlashTab(chatFrame) -- shit is the wrong kind?
+        end
+    else
+        -- stop flashing
+        FCFManager_StopFlashOnDedicatedWindows("WHISPER", takeNameFromPlayername(sender));
+
+        -- TODO: figure this one out!
+        local chatFrame = chatFrames[takeNameFromPlayername(sender)] -- FCFManager_GetChatTarget("WHISPER", sender, UnitName("player"))
+        -- NOTE: there is no way to obtain the chat window from the `dedicatedWindows`?
+        if chatFrame == nil then
+            print("[!] No chat whisper frame found!!")
             return
-         end
-         SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
+        end
+        SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
+    end
+end
+
+-- TODO: 1536 bit prime?
+local prime = 2147483647 -- figure out big numbers in Lua?
+local generator = 2 -- this is fine?
+
+-- Function to calculate the modular exponentiation
+function modularExponentiation(base, exponent, modulus)
+   local result = 1
+   base = math.fmod(base, modulus)
+
+   while exponent > 0 do
+      if math.fmod(exponent, 2) == 1 then
+         result = math.fmod((result * base), modulus)
       end
+      base = math.fmod((base * base), modulus)
+      exponent = math.floor(exponent / 2)
    end
 
-   -- TODO: 1536 bit prime?
-   local prime = 2147483647 -- generatePrimeNumber()
-   local generator = 2 -- often used in chat encryption?
+   return result
+end
 
-   -- Function to calculate the modular exponentiation
-   function modularExponentiation(base, exponent, modulus)
-      local result = 1
-      base = math.fmod(base, modulus)
+function generateKeys()
+   local priv = math.random(2, prime - 1)
+   local pub = modularExponentiation(generator, priv, prime)
 
-      while exponent > 0 do
-         if math.fmod(exponent, 2) == 1 then
-            result = math.fmod((result * base), modulus)
-         end
-         base = math.fmod((base * base), modulus)
-         exponent = math.floor(exponent / 2)
-      end
+   -- to calc shared secret:
+   -- modularExponentiation(publicB, privateA, prime)
 
-      return result
-   end
+   return pub, priv
+end
 
-   function generateKeys()
-      local priv = math.random(2, prime - 1)
-      local pub = modularExponentiation(generator, priv, prime)
+local keychain = {}
 
-      -- to calc shared secret:
-      -- modularExponentiation(publicB, privateA, prime)
+local function AddKeychain(playername, value)
+   local name = takeNameFromPlayername(playername)
+   keychain[name] = value;
+end
+local function GetKey(playername)
+   local name = takeNameFromPlayername(playername)
+   return keychain[name]
+end
 
-      return pub, priv
-   end
+local pubkey, privkey = generateKeys()
 
-  --print(diffieHellman)
+-- TODO: add user config options?
+local hook = true
+local debug = IsGMClient()
 
-   -- TODO: Register ChatCommand for pub key
-   -- InspectPaperDollFrame -> InspectLevelText
-
-   -- TODO: Register ChatCommand for RSAWhsipers
-
-   -- Request chat? or just ignore and auto give?
-
-   -- Before the user whispers, it should somehow request the
-   -- to give their public key, which the receiver can then use
-   -- to encrypt their whispers.
-   --
-   -- AFAIK Wow only has a secure post-hook?
-
-   -- test hook? yes this works!
-   -- Now make a cache of users and ask on /w for their key
-   -- if no key ignore? otherwise save and use key for encryption
-   -- wait a second (or two) before dispatching the failsafe msg?
-   local _SendChatMessage = _G.SendChatMessage
-
-   local keychain = {}
-   
-   local pubkey, privkey = generateKeys()
-
-   local hook = true
-   local debug = true
-
-   if hook then
-      _G.SendChatMessage = function(msg, chatType, language, channel)
-         if chatType ~= "WHISPER" then
+if hook then
+    local _SendChatMessage = _G.SendChatMessage
+    _G.SendChatMessage = function(msg, chatType, language, channel)
+        if chatType ~= "WHISPER" then
             return _SendChatMessage(msg, chatType, language, channel)
-         end
-         
-         -- hit cache for known keys?
-         -- ask user for key?
-         
+        end
+        
+        -- TODO: hit cache for known keys? handle if target offline/relogged?
+        local function sendEncrypted()
+            if GetKey(channel) then
+                local encryptedMsg = encrypt(msg, GetKey(channel))
+                
+                if debug then
+                    print("[WHSP]: sending: " .. encryptedMsg)
+                end
 
-         if debug then
-            print("[WHSP]: Unk receiver, sending PUBK (" .. pubkey .. ") to " .. channel)
-         end
-
-         local addonmsg = "PUBK" .. tostring(pubkey);
-         C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
-
-         --else
-         C_Timer.After(2, function() 
-
-            -- have it encrypted?
-            if keychain[channel] ~= nil then
-               -- encrypt?
-
-               local encryptedMsg = encrypt(msg, keychain[channel]) -- TODO: actually encrypt this? xD
-               
-               if debug then
-                  print("[WHSP]: sending: " .. encryptedMsg)
-               end
-
-               C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
-               -- TODO: print msg?
-               spoofOTRWhisper(msg, channel, true) -- sender is self?
+                C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
+                spoofOTRWhisper(msg, channel, true)
             else
-               print("[!] no key found for " .. channel .. ", falling back on WHISPER")
-               _SendChatMessage(msg, chatType, language, channel)
+                print("[!] no key found for " .. channel .. ", falling back on WHISPER")
+                _SendChatMessage(msg, chatType, language, channel)
             end
-         end)
-      end
-   end
+        end
 
-   -- SendAddonMessage
-   local function OnCommandReceive(commMessage, distribution, sender)
-      -- TODO: ignore self (soon-ish)
+        if GetKey(channel) ~= nil then
+            sendEncrypted()
+            return
+        end
+    
+        -- Key not exist, request key and sendEncrypted in 2.5 seconds max?
+        if debug then
+            print("[WHSP]: Unk receiver, sending PUBK (" .. pubkey .. ") to " .. channel)
+        end
 
-      -- only YELL for pub key?
+        local addonmsg = "PUBK" .. tostring(pubkey);
+        C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
+        
+        C_Timer.After(2.5, sendEncrypted)
+    end
+end
 
-      -- WHISPER request key
-      if distribution == "WHISPER" then
-         local opcode = string.sub(commMessage, 1, 4)
-         --print(opcode)
+local function OnCommandReceive(commMessage, distribution, sender)
+    -- TODO: ignore self (soon-ish)
 
-         -- Requested Pubkey
-         if opcode == "PUBK" then
-            local pubkeySender = string.sub(commMessage, 5)
+    if distribution ~= "WHISPER" then
+        return
+    end
 
-            if debug then
-               print("[PUBK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
-            end
+    local opcode = string.sub(commMessage, 1, 4)
 
-            -- TODO proper error handeling?
-            local pubkeySender = tonumber(pubkeySender)
-            local sharedKeyB = modularExponentiation(pubkeySender, privkey, prime)
+    if opcode == "PUBK" then
+        local pubkeySender = string.sub(commMessage, 5)
 
-            -- substring on '-'?
-            local t={}
-            for str in string.gmatch(sender, "([^"..'-'.."]+)") do
-               table.insert(t, str)
-            end
-            local name = t[1] or sender
+        if debug then
+            print("[PUBK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
+        end
 
-            -- add to keychain?
-            keychain[name] = pubkeySender;
+        -- TODO proper error handeling?
+        local pubkeySender = tonumber(pubkeySender)
+        local sharedKeyB = modularExponentiation(pubkeySender, privkey, prime)
 
-            if debug then
-               print("[PUBK]: Shared Key: " .. tostring(sharedKeyB))
-               print("[PUBK]: Sending PUBK (" .. tostring(pubkey) .. ") to " .. sender)
-            end
+        AddKeychain(sender, sharedKeyB)
 
-            local pubkeyMsg = "PKOK" .. pubkey
-            C_ChatInfo.SendAddonMessage(addonPrefix, pubkeyMsg, distribution, sender)
-         elseif opcode == "PKOK" then
-            local pubkeySender = string.sub(commMessage, 5)
+        if debug then
+            print("[PUBK]: Shared Key: " .. tostring(sharedKeyB))
+            print("[PUBK]: Sending PUBK (" .. tostring(pubkey) .. ") to " .. sender)
+        end
+
+        local pubkeyMsg = "PKOK" .. pubkey
+        C_ChatInfo.SendAddonMessage(addonPrefix, pubkeyMsg, distribution, sender)
+
+    elseif opcode == "PKOK" then
+        local pubkeySender = string.sub(commMessage, 5)
+
+        if debug then
             print("[PKOK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
-            
-            -- do some math?
-            local sharedKeyA = modularExponentiation(tonumber(pubkeySender), privkey, prime)
+        end
 
-            if debug then
-               print("[PKOK]: Shared key: " .. tostring(sharedKeyA))
-            end
+        local sharedKeyA = modularExponentiation(tonumber(pubkeySender), privkey, prime)
 
-            -- substring on '-'?
-            local t={}
-            for str in string.gmatch(sender, "([^"..'-'.."]+)") do
-               table.insert(t, str)
-            end
-            local name = t[1] or sender
+        if debug then
+            print("[PKOK]: Shared key: " .. tostring(sharedKeyA))
+        end
 
-            -- add to keychain?
-            keychain[name] = pubkey;
-         elseif opcode == "OTRW" then
-            -- Off-The-Record message!
-            local t={}
-            for str in string.gmatch(sender, "([^"..'-'.."]+)") do
-               table.insert(t, str)
-            end
-            local name = t[1] or sender
+        AddKeychain(sender, sharedKeyA)
 
-            if keychain[name] == nil then
-               -- bad!
-               print("[OTRW] Failed decrypting message from " .. sender)
-            end
+    elseif opcode == "OTRW" then
+        local encryptedMessage = string.sub(commMessage, 5)
+        local key = GetKey(sender)
+        if key == nil then
+            -- bad!
+            print("[OTRW] Failed decrypting message from " .. sender)
+        end
 
-            -- decrypt?
-            local decryptedMessage = decrypt(string.sub(commMessage, 5), keychain[name])
-            if debug then
-               print("[OTRW] " .. sender .. " encrypted: " .. string.sub(commMessage, 5))
-               print("[OTRW] " .. sender .. " whispers: " .. decryptedMessage)
-            end
-            
-            spoofOTRWhisper(decryptedMessage, sender, false)
+        -- decrypt?
+        local decryptedMessage = decrypt(encryptedMessage, key)
+        if debug then
+            print("[OTRW] " .. sender .. " encrypted: " .. string.sub(commMessage, 5))
+            print("[OTRW] " .. sender .. " whispers: " .. decryptedMessage)
+        end
 
-            -- invoke FloatingChatFrameManager_OnEvent
-            if FloatingChatFrameManager ~= nil then
-               -- CHAT_MSG_WHISPER: 
-               -- text, playerName, languageName, channelName, playerName2, 
-               -- specialFlags, zoneChannelID, channelIndex, channelBaseName, 
-               -- languageID, lineID, guid, bnSenderID, isMobile, isSubtitle, 
-               -- hideSenderInLetterbox, supressRaidIcons
-               --[[
-               FloatingChatFrameManager_OnEvent(
-                  FloatingChatFrameManager, 
-                  "CHAT_MSG_WHISPER",
-                  "AA", 
-                  "[OTR] " .. sender, 
-                  "Common",
-                  "WHISPER",
-                  sender,
-                  0,
-                  0,
-                  0,
-                  "",
-                  0,
-                  0,
-                  UnitGUID("player"),
-                  0,
-                  false,
-                  false,
-                  false,
-                  false
-               )]]--
-               --[[
-               FloatingChatFrameManager_OnEvent(
-                  FloatingChatFrameManager, 
-                  decryptedMessage, 
-                  sender, 
-                  "Common",
-                  "WHISPER",
-                  sender,
-                  0, -- ??
-                  0,
-                  "WHISPER", -- ??
-                  7, -- aly common?
-                  0, -- ??
-                  "", -- GUID?
-                  0, -- bnet?
-                  false,
-                  false,
-                  false,
-                  false
-               )]]--
-            end
+        spoofOTRWhisper(decryptedMessage, sender, false)
+    end
 
-         end
+end
 
-      end
-   end
+local function EventHandler(self, event, prefix, commMessage, distribution, sender)
+    if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
+        OnCommandReceive(commMessage, distribution, sender)
+    end
+end
 
-   local function EventHandler(self, event, prefix, commMessage, distribution, sender)
-      --print(event, prefix, commMessage, distribution, sender)
-      if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
-         OnCommandReceive(commMessage, distribution, sender)
-      --elseif event == "CHAT_MSG_OTG_WHISPER" then
-      --   COPY_FloatingChatFrameManager_OnEvent()
-      end
-   end
-
-   -- Register the callback handler
-   local frame = CreateFrame("Frame")
-   frame:RegisterEvent("CHAT_MSG_ADDON")
-   --frame:RegisterEvent("CHAT_MSG_OTG_WHISPER")
-   frame:SetScript("OnEvent", EventHandler)
-end)
+-- Register the callback handler
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("CHAT_MSG_ADDON")
+frame:SetScript("OnEvent", EventHandler)
+C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
