@@ -4,6 +4,37 @@ C_Timer.After(0, function()
 
    C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
 
+   -- poor symetric encryption
+   local function encryptDecrypt(data, key)
+      local encrypted = ""
+      local keyLength = #key
+      local dataIndex = 1
+
+      for i = 1, #data do
+            local byte = string.byte(data, i)
+            local keyByte = string.byte(key, dataIndex)
+
+            local encryptedByte = bit.bxor(byte, keyByte)
+            encrypted = encrypted .. string.char(encryptedByte)
+
+            dataIndex = dataIndex + 1
+            if dataIndex > keyLength then
+               dataIndex = 1
+            end
+      end
+
+      return encrypted
+   end
+
+  -- wrapper, soonTM
+   local function encrypt(string, key)
+      return encryptDecrypt(string, tostring(key))
+   end
+
+   local function decrypt(string, key)
+      return encryptDecrypt(string, tostring(key))
+   end
+
    local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
       -- NOTE: see ChatFrame_MessageEventHandler
       --chatFrame:GetScript("OnEvent")(chatFrame, event, ...); -- TODO: Fire the event for the frame.
@@ -117,13 +148,6 @@ C_Timer.After(0, function()
       end
    end
 
-   -- KEY EXCHANGE TEST
-   --[[
-      diffie-hellman算法简单代码 (Algorithm simple code)
-   ]]
-   local low = 10	--约定的随机数集合 (Agreed set of random numbers)
-   local high = 20
-
    -- TODO: 1536 bit prime?
    local prime = 2147483647 -- generatePrimeNumber()
    local generator = 2 -- often used in chat encryption?
@@ -200,13 +224,19 @@ C_Timer.After(0, function()
          C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
 
          --else
-         C_Timer.After(1, function() 
+         C_Timer.After(2, function() 
 
             -- have it encrypted?
             if keychain[channel] ~= nil then
                -- encrypt?
-               local encryptedMsg = "OTRW" .. msg -- TODO: actually encrypt this? xD
-               C_ChatInfo.SendAddonMessage(addonPrefix, encryptedMsg, "WHISPER", channel)
+
+               local encryptedMsg = encrypt(msg, keychain[channel]) -- TODO: actually encrypt this? xD
+               
+               if debug then
+                  print("[WHSP]: sending: " .. encryptedMsg)
+               end
+
+               C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
                -- TODO: print msg?
                spoofOTRWhisper(msg, channel, true) -- sender is self?
             else
@@ -291,8 +321,9 @@ C_Timer.After(0, function()
             end
 
             -- decrypt?
-            local decryptedMessage = string.sub(commMessage, 5);
+            local decryptedMessage = decrypt(string.sub(commMessage, 5), keychain[name])
             if debug then
+               print("[OTRW] " .. sender .. " encrypted: " .. string.sub(commMessage, 5))
                print("[OTRW] " .. sender .. " whispers: " .. decryptedMessage)
             end
             
@@ -353,36 +384,6 @@ C_Timer.After(0, function()
 
       end
    end
-
-
-
-   --[[
-   local function COPY_FloatingChatFrameManager_OnEvent(self, event, ...)
-      local arg1 = ...;
-      if ( event == "CHAT_MSG_OTG_WHISPER" ) then
-         local chatTarget = tostring(select(2, ...));
-         local chatGroup = "WHISPER"
-
-         if ( FCFManager_GetNumDedicatedFrames(chatGroup, chatTarget) == 0 ) then
-            local chatFrame = FCF_OpenTemporaryWindow(chatGroup, chatTarget);
-            chatFrame:GetScript("OnEvent")(chatFrame, event, ...);	--Re-fire the event for the frame.
-
-            -- If you started the whisper, immediately select the tab
-            if ((event == "CHAT_MSG_WHISPER_INFORM" and GetCVar("whisperMode") == "popout")
-               or (event == "CHAT_MSG_BN_WHISPER_INFORM" and GetCVar("whisperMode") == "popout") ) then
-               FCF_SelectDockFrame(chatFrame);
-               FCF_FadeInChatFrame(chatFrame);
-            end
-         else
-            -- While in "Both" mode, if you reply to a whisper, stop the flash on that dedicated whisper tab
-            if ( (chatType == "WHISPER_INFORM" and GetCVar("whisperMode") == "popout_and_inline")
-            or (chatType == "BN_WHISPER_INFORM" and GetCVar("whisperMode") == "popout_and_inline")) then
-               FCFManager_StopFlashOnDedicatedWindows(chatGroup, chatTarget);
-            end
-         end
-      end
-   end
-   ]]--
 
    local function EventHandler(self, event, prefix, commMessage, distribution, sender)
       --print(event, prefix, commMessage, distribution, sender)
