@@ -1,4 +1,4 @@
-local addonPrefix = "OTRWhisper" .. "0";
+local addonPrefix = "OTRWhisper" .. "P0C";
 
 local chatFrames = {} -- temp?
 
