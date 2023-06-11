@@ -9,7 +9,7 @@ Off-The-Record Whisper or **OTRWhisper** is a Wow AddOn to provide a _(poorly)_ 
 
 - Off-The-Record communication _(Forward secrecy & Deniable authentication)_
 - ~~Block all non-OTR incoming whispers~~ _(TODO)_
-- ~~User only friendlist as OTR~~ _(TODO)_
+- User only friendlist as OTR
 
 
 ## Limitations

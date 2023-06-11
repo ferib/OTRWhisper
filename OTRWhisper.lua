@@ -7,8 +7,8 @@ local chatFrames = {} -- temp?
 -- #==============#
 --
 -- C_FriendList.GetFriendInfo(name)
-local Settings_FriendListOnly = false
-local Settings_ForceOTR = false
+--Settings_FriendListOnly = false
+--Settings_ForceOTR = false
 local debug = IsGMClient()
 
 -- poor symetric encryption
@@ -328,19 +328,10 @@ local function OnCommandReceive(commMessage, distribution, sender)
 
 end
 
-local function EventHandler(self, event, prefix, commMessage, distribution, sender)
-    if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
-        OnCommandReceive(commMessage, distribution, sender)
-    end
-end
+-- #============#
+-- #     UI     #
+-- #============#
 
--- Register the callback handler
-local frame = CreateFrame("Frame")
-frame:RegisterEvent("CHAT_MSG_ADDON")
-frame:SetScript("OnEvent", EventHandler)
-C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
-
--- 
 local panel = CreateFrame("Frame")
 panel.name = "OTRWhisper"               -- see panel fields
 InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
@@ -364,3 +355,28 @@ checkboxForceOTR.Text:SetText("Block ALL Non-OTR Whispers")
 checkboxForceOTR:SetScript("OnClick", function()
     Settings_ForceOTR = checkboxForceOTR:GetChecked()
 end)
+
+
+-- #============#
+-- #   Events   #
+-- #============#
+
+local function EventHandler(self, event, prefix, commMessage, distribution, sender)
+    if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
+        OnCommandReceive(commMessage, distribution, sender)
+    elseif event == "ADDON_LOADED" and prefix == "OTRWhisper" then
+        print("Addon Loaded!", Settings_ForceOTR, Settings_FriendListOnly)
+        if Settings_ForceOTR == nil then Settings_ForceOTR = false end
+        checkboxFriendlist:SetChecked(Settings_ForceOTR)
+
+        if Settings_FriendListOnly == nil then Settings_FriendListOnly = false end
+        checkboxForceOTR:SetChecked(Settings_FriendListOnly)
+    end
+end
+
+-- Register the callback handler
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("CHAT_MSG_ADDON")
+frame:RegisterEvent("ADDON_LOADED");
+frame:SetScript("OnEvent", EventHandler)
+C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
