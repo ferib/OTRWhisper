@@ -5,8 +5,7 @@ local chatFrames = {} -- temp?
 -- #==============#
 -- #   Settings   #
 -- #==============#
---
--- C_FriendList.GetFriendInfo(name)
+
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
 local debug = IsGMClient()
@@ -361,22 +360,45 @@ end)
 -- #   Events   #
 -- #============#
 
+-- TODO: use varargs !!
 local function EventHandler(self, event, prefix, commMessage, distribution, sender)
     if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
         OnCommandReceive(commMessage, distribution, sender)
+        return true -- always accept?
     elseif event == "ADDON_LOADED" and prefix == "OTRWhisper" then
-        print("Addon Loaded!", Settings_ForceOTR, Settings_FriendListOnly)
+        if debug then
+            print("Addon Loaded!", Settings_ForceOTR, Settings_FriendListOnly)
+        end
         if Settings_ForceOTR == nil then Settings_ForceOTR = false end
-        checkboxFriendlist:SetChecked(Settings_ForceOTR)
+        checkboxForceOTR:SetChecked(Settings_ForceOTR)
 
         if Settings_FriendListOnly == nil then Settings_FriendListOnly = false end
-        checkboxForceOTR:SetChecked(Settings_FriendListOnly)
+        checkboxFriendlist:SetChecked(Settings_FriendListOnly)
+        return true
     end
 end
+
+
+-- filter /w if ForceOTR
+ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", function(self, event, msg, player)
+    if not Settings_ForceOTR then
+        return
+    end
+
+    -- TODO: figure out how to not print multiple times?
+
+    -- TODO: Fancy print?
+    local pname = UnitName("player")
+    local informMsg = "[OTRWhisper]: Player " .. pname .. " only accepts Off-The-Records Whispers from the OTRWhisper AddOn"
+    print("[OTRWhisper]: blocked 1 message from " .. player)
+    _SendChatMessage(informMsg, "WHISPER", "", player)
+    return true
+end)
 
 -- Register the callback handler
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:RegisterEvent("ADDON_LOADED");
+frame:RegisterEvent("CHAT_MSG_WHISPER");
 frame:SetScript("OnEvent", EventHandler)
 C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)

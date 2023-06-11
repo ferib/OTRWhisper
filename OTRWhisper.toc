@@ -3,6 +3,6 @@
 ## Version: v0.0.1
 ## Author: Ferib Hellscream
 ## Notes: Add |cff00FAF6OTR|r to your |cffFF7EFFwhispers|r!
-## SavedVariablesPerCharacter: Settings_FriendListOnly
+## SavedVariablesPerCharacter: Settings_FriendListOnly, Settings_ForceOTR
 
 OTRWhisper.lua
