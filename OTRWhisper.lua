@@ -2,6 +2,15 @@ local addonPrefix = "OTRWhisper" .. "P0C";
 
 local chatFrames = {} -- temp?
 
+-- #==============#
+-- #   Settings   #
+-- #==============#
+--
+-- C_FriendList.GetFriendInfo(name)
+local Settings_FriendListOnly = false
+local Settings_ForceOTR = false
+local debug = IsGMClient()
+
 -- poor symetric encryption
 local function encryptDecrypt(data, key)
    local encrypted = ""
@@ -41,7 +50,7 @@ local function takeNameFromPlayername(playername)
     return t[1] or playername
 end
 
- local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
+local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
    -- NOTE: see ChatFrame_MessageEventHandler
    --chatFrame:GetScript("OnEvent")(chatFrame, event, ...); -- TODO: Fire the event for the frame.
 
@@ -207,49 +216,51 @@ end
 
 local pubkey, privkey = generateKeys()
 
--- TODO: add user config options?
-local hook = true
-local debug = IsGMClient()
+local _SendChatMessage = _G.SendChatMessage
+_G.SendChatMessage = function(msg, chatType, language, channel)
 
-if hook then
-    local _SendChatMessage = _G.SendChatMessage
-    _G.SendChatMessage = function(msg, chatType, language, channel)
-        if chatType ~= "WHISPER" then
-            return _SendChatMessage(msg, chatType, language, channel)
-        end
-        
-        -- TODO: hit cache for known keys? handle if target offline/relogged?
-        local function sendEncrypted()
-            if GetKey(channel) then
-                local encryptedMsg = encrypt(msg, GetKey(channel))
-                
-                if debug then
-                    print("[WHSP]: sending: " .. encryptedMsg)
-                end
-
-                C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
-                spoofOTRWhisper(msg, channel, true)
-            else
-                print("[!] no key found for " .. channel .. ", falling back on WHISPER")
-                _SendChatMessage(msg, chatType, language, channel)
-            end
-        end
-
-        if GetKey(channel) ~= nil then
-            sendEncrypted()
-            return
-        end
-    
-        -- Key not exist, request key and sendEncrypted in 2.5 seconds max?
+    -- skip if not Whisper. allow non-friend if already has key
+    if chatType ~= "WHISPER" 
+    or ( Settings_FriendListOnly and (C_FriendList.GetFriendInfo(channel) == nil 
+        and not GetKey(channel)))
+    then
         if debug then
-            print("[WHSP]: Unk receiver, sending PUBK (" .. pubkey .. ") to " .. channel)
+            print("Skip " .. chatType .. " for " .. channel)
         end
-
-        local addonmsg = "PUBK" .. tostring(pubkey);
-        C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
-        
-        C_Timer.After(2.5, sendEncrypted)
+        return _SendChatMessage(msg, chatType, language, channel)
     end
+    
+    -- TODO: hit cache for known keys? handle if target offline/relogged?
+    local function sendEncrypted()
+        if GetKey(channel) then
+            local encryptedMsg = encrypt(msg, GetKey(channel))
+            
+            if debug then
+                print("[WHSP]: sending: " .. encryptedMsg)
+            end
+
+            C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
+            spoofOTRWhisper(msg, channel, true)
+        else
+            print("[!] no key found for " .. channel .. ", falling back on WHISPER")
+            _SendChatMessage(msg, chatType, language, channel)
+        end
+    end
+
+    if GetKey(channel) ~= nil then
+        sendEncrypted()
+        return
+    end
+
+    -- Key not exist, request key and sendEncrypted in 2.5 seconds max?
+    if debug then
+        print("[WHSP]: Unk receiver, sending PUBK (" .. pubkey .. ") to " .. channel)
+    end
+
+    local addonmsg = "PUBK" .. tostring(pubkey);
+    C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
+    
+    C_Timer.After(2.5, sendEncrypted)
 end
 
 local function OnCommandReceive(commMessage, distribution, sender)
@@ -328,3 +339,28 @@ local frame = CreateFrame("Frame")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent", EventHandler)
 C_ChatInfo.RegisterAddonMessagePrefix(addonPrefix)
+
+-- 
+local panel = CreateFrame("Frame")
+panel.name = "OTRWhisper"               -- see panel fields
+InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
+
+-- add widgets to the panel as desired
+local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
+title:SetPoint("TOP")
+title:SetText("Off-The-Record Whisper")
+
+-- TODO: cache these things somewhere?
+local checkboxFriendlist = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
+checkboxFriendlist:SetPoint("TOPLEFT", 20, -20)
+checkboxFriendlist.Text:SetText("Friendlist OTR only")
+checkboxFriendlist:SetScript("OnClick", function()
+    Settings_FriendListOnly = checkboxFriendlist:GetChecked()
+end)
+
+local checkboxForceOTR = CreateFrame("CheckButton", nil, panel, "InterfaceOptionsCheckButtonTemplate")
+checkboxForceOTR:SetPoint("TOPLEFT", 20, -60)
+checkboxForceOTR.Text:SetText("Block ALL Non-OTR Whispers")
+checkboxForceOTR:SetScript("OnClick", function()
+    Settings_ForceOTR = checkboxForceOTR:GetChecked()
+end)

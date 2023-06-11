@@ -1,4 +1,4 @@
-## Interface: 10000
+## Interface: 100100
 ## Title: |cff00FAF6OTR|cffFF7EFFWhisper
 ## Version: v0.0.1
 ## Author: Ferib Hellscream
