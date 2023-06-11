@@ -12,24 +12,24 @@ local debug = IsGMClient()
 
 -- poor symetric encryption
 local function encryptDecrypt(data, key)
-   local encrypted = ""
-   local keyLength = #key
-   local dataIndex = 1
+    local encrypted = ""
+    local keyLength = #key
+    local dataIndex = 1
 
-   for i = 1, #data do
-         local byte = string.byte(data, i)
-         local keyByte = string.byte(key, dataIndex)
+    for i = 1, #data do
+        local byte = string.byte(data, i)
+        local keyByte = string.byte(key, dataIndex)
 
-         local encryptedByte = bit.bxor(byte, keyByte)
-         encrypted = encrypted .. string.char(encryptedByte)
+        local encryptedByte = bit.bxor(byte, keyByte)
+        encrypted = encrypted .. string.char(encryptedByte)
 
-         dataIndex = dataIndex + 1
-         if dataIndex > keyLength then
+        dataIndex = dataIndex + 1
+        if dataIndex > keyLength then
             dataIndex = 1
-         end
-   end
+        end
+    end
 
-   return encrypted
+    return encrypted
 end
 
 -- wrapper, soonTM
@@ -84,7 +84,7 @@ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
 
         -- NOTE: No GUID so no colors?
         --local playerLink = "[|cffffffff" .. sender .. "|r]";
-        local playerLink = "[|cff222222" .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
+        local playerLink = "[|cff00FF98" .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
         local playerLinkDisplayText = coloredName;
         local relevantDefaultLanguage = chatFrame.defaultLanguage;
 
@@ -98,7 +98,10 @@ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
         end
 
         --Add Timestamps
-        local chatTimestampFmt = GetChatTimestampFormat();
+        local chatTimestampFmt = nil
+        if GetChatTimestampFormat then
+            chatTimestampFmt = GetChatTimestampFormat(); -- Retail Only?
+        end
         if ( chatTimestampFmt ) then
             outMsg = BetterDate(chatTimestampFmt, msgTime)..outMsg;
         end
@@ -106,7 +109,8 @@ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
         return outMsg;
     end
 
-    local isChatLineCensored = C_ChatInfo.IsChatLineCensored(lineID);
+    -- NOTE: Classic no has :( ?
+    --local isChatLineCensored = C_ChatInfo.IsChatLineCensored(lineID);
 
     --local msg = isChatLineCensored and arg1 or MessageFormatter(arg1);
     local msg = MessageFormatter(arg1)
@@ -155,6 +159,7 @@ local function spoofOTRWhisper(message, sender, isSender)
             FCF_SelectDockFrame(chatFrame);
             FCF_FadeInChatFrame(chatFrame);
         else
+            FCF_FadeInChatFrame(chatFrame); -- ??
             FCF_FlashTab(chatFrame) -- shit is the wrong kind?
         end
     else
@@ -168,6 +173,10 @@ local function spoofOTRWhisper(message, sender, isSender)
             print("[!] No chat whisper frame found!!")
             return
         end
+
+        FCF_FadeInChatFrame(chatFrame); -- ??
+        FCF_FlashTab(chatFrame)
+        
         SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
     end
 end
@@ -311,7 +320,7 @@ local function OnCommandReceive(commMessage, distribution, sender)
         local encryptedMessage = string.sub(commMessage, 5)
         local key = GetKey(sender)
         if key == nil then
-            -- bad!
+            -- bad! exchange again? or this is failure?
             print("[OTRW] Failed decrypting message from " .. sender)
         end
 
