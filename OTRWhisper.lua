@@ -1,5 +1,9 @@
+local addon = OTRWhisper
+
 local addonPrefix = "OTRWhisper" .. "P0C";
 
+local protocolVersion = 2
+local bignum = _G.BigNumber
 local chatFrames = {} -- temp?
 
 -- #==============#
@@ -8,7 +12,12 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = IsGMClient()
+local debug = false --IsGMClient()
+
+local _print = print
+local function print(...)
+    _print("|cffFF7EFF[|cff00FAF6OTR|cffFF7EFFWhisper]:|r", ...)
+end
 
 -- poor symetric encryption
 local function encryptDecrypt(data, key)
@@ -181,37 +190,68 @@ local function spoofOTRWhisper(message, sender, isSender)
     end
 end
 
--- TODO: 1536 bit prime?
-local prime = 2147483647 -- figure out big numbers in Lua?
-local generator = 2 -- this is fine?
-
--- Function to calculate the modular exponentiation
-function modularExponentiation(base, exponent, modulus)
-   local result = 1
-   base = math.fmod(base, modulus)
-
-   while exponent > 0 do
-      if math.fmod(exponent, 2) == 1 then
-         result = math.fmod((result * base), modulus)
-      end
-      base = math.fmod((base * base), modulus)
-      exponent = math.floor(exponent / 2)
-   end
-
-   return result
+function bignum_mod(a, b)
+    local q = BigNum.new()  -- quotient (discarded)
+    local r = BigNum.new()  -- remainder (this is what we want)
+    BigNum.div(a, b, q, r)
+    return r
 end
 
+-- Vires in numeris, 1024 bit (TODO: https://datatracker.ietf.org/doc/html/rfc3526#section-3)
+local prime = BigNum.new("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139") --138906510677011891929592526950652639230206605539989724821445378383957431108810776885337490647001125862737696358886844639523156958002155026797141586656698076850836605519143529711779461131498229669823806930874057768070744659329846993687078442187495466253952387056074335580898174981611057828352967545621549843561")
+local generator = BigNum.new("2")
+
+function modexp(base, exponent, modulus)
+    local one = BigNum.new("1")
+    local zero = BigNum.new("0")
+    local two = BigNum.new("2")
+    local result = one
+
+    base = bignum_mod(base, modulus)
+
+    local count = 0
+    while not BigNum.le(exponent, zero) do --BigNum.gt(exponent, zero) do -- exponent > 0
+        count = count + 1
+        if BigNum.eq(bignum_mod(exponent, two), one) then --if exponent % 2 == 1 then
+            result = bignum_mod(result * base, modulus)
+        end
+        base = bignum_mod(base * base, modulus)
+        newexp = BigNum.new()
+        BigNum.div(exponent, two, newexp, BigNum.new()) -- newexp = exponent // 2
+        exponent = newexp
+    end
+
+    return result
+end
+
+-- TODO: figure out proper RNG, or ATLEAST use
+-- something that is not predictable?
+function unsecureRandomBigNum(bits)
+    local digits = math.ceil(bits / 3.32)  -- log2(10) ≈ 3.32
+    local s = {}
+    table.insert(s, math.random(1, 9))
+    for _ = 2, digits do
+       table.insert(s, math.random(0, 9))
+    end
+
+    return BigNum.new(table.concat(s))
+end
+
+
+-- Key generation (like Diffie-Hellman)
 function generateKeys()
-   local priv = math.random(2, prime - 1)
-   local pub = modularExponentiation(generator, priv, prime)
-
-   -- to calc shared secret:
-   -- modularExponentiation(publicB, privateA, prime)
-
+   local priv = unsecureRandomBigNum(100) --unsecureRandomBigNum(1536) -- TODO: secure rng!!!
+   local pub = modexp(generator, priv, prime)
    return pub, priv
 end
 
+--local pub, priv = generateKeys()
+--print("Public key:  ", pub)
+--print("Private key: ", priv)
+
+
 local keychain = {}
+local playerVersions = {}
 
 local function AddKeychain(playername, value)
    local name = takeNameFromPlayername(playername)
@@ -223,10 +263,10 @@ local function GetKey(playername)
 end
 
 local pubkey, privkey = generateKeys()
+print("New keypair generated! (v" .. tostring(protocolVersion) .. ")")
 
 local _SendChatMessage = _G.SendChatMessage
 _G.SendChatMessage = function(msg, chatType, language, channel)
-
     -- skip if not Whisper. allow non-friend if already has key
     if chatType ~= "WHISPER" 
     or ( Settings_FriendListOnly and (C_FriendList.GetFriendInfo(channel) == nil 
@@ -236,10 +276,11 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
             print("Skip " .. chatType .. " for " .. channel)
         end
         return _SendChatMessage(msg, chatType, language, channel)
-    end
-    
-    -- TODO: hit cache for known keys? handle if target offline/relogged?
-    local function sendEncrypted()
+    end 
+
+
+
+    local function sendEncryptedMessage()
         if GetKey(channel) then
             local encryptedMsg = encrypt(msg, GetKey(channel))
             
@@ -250,25 +291,57 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
             C_ChatInfo.SendAddonMessage(addonPrefix, "OTRW" .. encryptedMsg, "WHISPER", channel)
             spoofOTRWhisper(msg, channel, true)
         else
-            print("[!] no key found for " .. channel .. ", falling back on WHISPER")
+            print("Error, no key found for " .. tostring(channel) .. " - E2EE DISABLED")
             _SendChatMessage(msg, chatType, language, channel)
         end
     end
+    -- TODO: hit cache for known keys? handle if target offline/relogged?
+    local function pre_sendEncryptedMessage()
+        -- check timeout
+        local name = takeNameFromPlayername(channel)
+        if playerVersions[name] == nil then
+            print("Error, no ACK from " .. tostring(channel) .. " - E2EE DISABLED")
+            _SendChatMessage(msg, chatType, language, channel)
+            return
+        end
 
-    if GetKey(channel) ~= nil then
-        sendEncrypted()
-        return
+        if playerVersions[name] ~= protocolVersion then
+            print("Error, version missmatch for " .. tostring(channel) .. " - E2EE DISABLED,", playerVersions[name], " != ", protocolVersion)
+            _SendChatMessage(msg, chatType, language, channel)
+            return
+        end
+
+        -- player IS found? good, continue!
+        -- TODO: actually do a callback if receiv pubkey?
+        
+        -- NOTE: This is sooooo shitty but whatever xD
+        local count = 0
+        local name = takeNameFromPlayername(channel)
+        local function _wait()
+            count = count +1
+            if debug then
+                print("Waiting", count, name)
+            end
+            if count > 50 then return end -- 5 sec max?
+            if GetKey(name) ~= nil then
+                sendEncryptedMessage()
+                return
+            end
+            C_Timer.After(0.1, _wait)
+        end  
+        _wait()
     end
 
     -- Key not exist, request key and sendEncrypted in 2.5 seconds max?
     if debug then
-        print("[WHSP]: Unk receiver, sending PUBK (" .. pubkey .. ") to " .. channel)
+        print("[WHSP]: Unk receiver, sending PUBK (" .. tostring(pubkey) .. ") to " .. tostring(channel))
     end
 
     local addonmsg = "PUBK" .. tostring(pubkey);
     C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
     
-    C_Timer.After(2.5, sendEncrypted)
+    -- give 500 ms to accept a ACK?
+    C_Timer.After(0.5, pre_sendEncryptedMessage)
 end
 
 local function OnCommandReceive(commMessage, distribution, sender)
@@ -280,27 +353,48 @@ local function OnCommandReceive(commMessage, distribution, sender)
 
     local opcode = string.sub(commMessage, 1, 4)
 
-    if opcode == "PUBK" then
-        local pubkeySender = string.sub(commMessage, 5)
+    if opcode == "PBSY" then
+        -- what??
 
+    elseif opcode == "PACK" then
+        -- good, target is computing? if version not missmatch?
         if debug then
-            print("[PUBK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
+            print("recv PACK from", sender)
         end
-
-        -- TODO proper error handeling?
-        local pubkeySender = tonumber(pubkeySender)
-        local sharedKeyB = modularExponentiation(pubkeySender, privkey, prime)
-
-        AddKeychain(sender, sharedKeyB)
-
+        local _, res = pcall(tonumber, string.sub(commMessage, 5))
+        if res == nil then res = -1 end
+        local name = takeNameFromPlayername(sender)
+        playerVersions[name] = tonumber(res)
+    elseif opcode == "PUBK" then
+        -- send PUBK ACK to let know we computing!
+        local pubkeyAckMsg = string.format("PACK%04d", protocolVersion) 
+        C_ChatInfo.SendAddonMessage(addonPrefix, pubkeyAckMsg, distribution, sender) 
         if debug then
-            print("[PUBK]: Shared Key: " .. tostring(sharedKeyB))
-            print("[PUBK]: Sending PUBK (" .. tostring(pubkey) .. ") to " .. sender)
+            print("Replied with PACK to", sender)
         end
+        
+        C_Timer.After(3, function()
+            local pubkeySender = string.sub(commMessage, 5)
 
-        local pubkeyMsg = "PKOK" .. pubkey
-        C_ChatInfo.SendAddonMessage(addonPrefix, pubkeyMsg, distribution, sender)
+            if debug then
+                print("[PUBK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
+            end
 
+            -- TODO proper error handeling?
+            local pubkeySender = BigNum.new(pubkeySender)
+            --local sharedKeyB = modularExponentiation(pubkeySender, privkey, prime)
+            local sharedKeyB = modexp(pubkeySender, privkey, prime)
+
+            AddKeychain(sender, sharedKeyB)
+
+            if debug then
+                print("[PUBK]: Shared Key: " .. tostring(sharedKeyB))
+                print("[PUBK]: Sending PUBK (" .. tostring(pubkey) .. ") to " .. sender)
+            end
+
+            local pubkeyMsg = "PKOK" .. tostring(pubkey)
+            C_ChatInfo.SendAddonMessage(addonPrefix, pubkeyMsg, distribution, sender)
+        end)
     elseif opcode == "PKOK" then
         local pubkeySender = string.sub(commMessage, 5)
 
@@ -308,7 +402,7 @@ local function OnCommandReceive(commMessage, distribution, sender)
             print("[PKOK]: Received PUBK (" .. pubkeySender .. ") from " .. sender)
         end
 
-        local sharedKeyA = modularExponentiation(tonumber(pubkeySender), privkey, prime)
+        local sharedKeyA = modexp(BigNum.new(pubkeySender), privkey, prime)
 
         if debug then
             print("[PKOK]: Shared key: " .. tostring(sharedKeyA))
@@ -342,7 +436,7 @@ end
 
 local panel = CreateFrame("Frame")
 panel.name = "OTRWhisper"               -- see panel fields
-InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
+--InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
 
 -- add widgets to the panel as desired
 local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
@@ -376,7 +470,7 @@ local function EventHandler(self, event, prefix, commMessage, distribution, send
         return true -- always accept?
     elseif event == "ADDON_LOADED" and prefix == "OTRWhisper" then
         if debug then
-            print("Addon Loaded!", Settings_ForceOTR, Settings_FriendListOnly)
+            print("ForceOTR:", Settings_ForceOTR, ", FriendListOnly:", Settings_FriendListOnly)
         end
         if Settings_ForceOTR == nil then Settings_ForceOTR = false end
         checkboxForceOTR:SetChecked(Settings_ForceOTR)

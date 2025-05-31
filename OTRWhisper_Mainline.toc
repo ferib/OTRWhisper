@@ -1,0 +1,9 @@
+## Interface: 100100
+## Title: |cff00FAF6OTR|cffFF7EFFWhisper
+## Version: v0.0.1
+## Author: Ferib Hellscream
+## Notes: Add |cff00FAF6OTR|r to your |cffFF7EFFwhispers|r!
+## SavedVariablesPerCharacter: Settings_FriendListOnly, Settings_ForceOTR
+
+BigNum.lua
+OTRWhisper.lua
