@@ -12,7 +12,7 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = false --IsGMClient()
+local debug = IsGMClient()
 
 local _print = print
 local function print(...)
@@ -92,8 +92,10 @@ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
         msg = RemoveExtraSpaces(msg);
 
         -- NOTE: No GUID so no colors?
-        --local playerLink = "[|cffffffff" .. sender .. "|r]";
-        local playerLink = "[|cff00FF98" .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
+        --local _, class = GetPlayerInfoByGUID(guid)
+        --local color = RAID_CLASS_COLORS[class]
+        --local playerLink = "[|c" .. color.colorStr .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
+        local playerLink = "[" .. GetPlayerLink(sender, sender, 0, "WHISPER", sender) .. "|r]"
         local playerLinkDisplayText = coloredName;
         local relevantDefaultLanguage = chatFrame.defaultLanguage;
 
@@ -252,6 +254,7 @@ end
 
 local keychain = {}
 local playerVersions = {}
+local playerBlacklist = {}
 
 local function AddKeychain(playername, value)
    local name = takeNameFromPlayername(playername)
@@ -278,7 +281,13 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
         return _SendChatMessage(msg, chatType, language, channel)
     end 
 
-
+    local name = takeNameFromPlayername(channel)
+    if playerBlacklist[name] ~= nil then
+        if debug then
+            print("Skip blacklist on ", name)
+        end
+        return _SendChatMessage(msg, chatType, language, channel)
+    end
 
     local function sendEncryptedMessage()
         if GetKey(channel) then
@@ -301,6 +310,10 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
         local name = takeNameFromPlayername(channel)
         if playerVersions[name] == nil then
             print("Error, no ACK from " .. tostring(channel) .. " - E2EE DISABLED")
+            -- blacklist so we dont have to wait 1 sec again
+            if playerBlacklist[name] == nil then
+                playerBlacklist[name] = true
+            end
             _SendChatMessage(msg, chatType, language, channel)
             return
         end
@@ -340,11 +353,11 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
     local addonmsg = "PUBK" .. tostring(pubkey);
     C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
     
-    -- give 500 ms to accept a ACK?
-    C_Timer.After(0.5, pre_sendEncryptedMessage)
+    -- give 950 ms to accept a ACK?
+    C_Timer.After(0.95, pre_sendEncryptedMessage)
 end
 
-local function OnCommandReceive(commMessage, distribution, sender)
+local function OnCommandReceive(commMessage, distribution, sender, guid)
     -- TODO: ignore self (soon-ish)
 
     if distribution ~= "WHISPER" then
@@ -464,9 +477,10 @@ end)
 -- #============#
 
 -- TODO: use varargs !!
-local function EventHandler(self, event, prefix, commMessage, distribution, sender)
+-- self, event, msg, author, _, _, _, _, _, _, _, _, lineID, guid)
+local function EventHandler(self, event, prefix, commMessage, distribution, sender, _, _, _, _, _, _, lineID, guid)
     if event == "CHAT_MSG_ADDON" and prefix == addonPrefix then
-        OnCommandReceive(commMessage, distribution, sender)
+        OnCommandReceive(commMessage, distribution, sender, guid)
         return true -- always accept?
     elseif event == "ADDON_LOADED" and prefix == "OTRWhisper" then
         if debug then
@@ -493,8 +507,13 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", function(self, event, msg, p
     -- TODO: Fancy print?
     local pname = UnitName("player")
     local informMsg = "[OTRWhisper]: Player " .. pname .. " only accepts Off-The-Records Whispers from the OTRWhisper AddOn"
-    print("[OTRWhisper]: blocked 1 message from " .. player)
+    print("[OTRWhisper]: blocked a message from " .. player)
     _SendChatMessage(informMsg, "WHISPER", "", player)
+
+    if debug then
+        return false
+    end
+
     return true
 end)
 
