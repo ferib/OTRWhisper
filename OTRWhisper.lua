@@ -346,7 +346,9 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
         -- check timeout
         local name = takeNameFromPlayername(channel)
         if playerVersions[name] == nil then
-            print("Error, no ACK from " .. tostring(channel) .. " - E2EE DISABLED")
+            if debug then
+                print("Error, no ACK from " .. tostring(channel) .. " - E2EE DISABLED")
+            end
             -- blacklist so we dont have to wait 1 sec again
             if playerBlacklist[name] == nil then
                 playerBlacklist[name] = true
