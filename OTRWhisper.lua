@@ -16,7 +16,7 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = IsGMClient()
+local debug = true --IsGMClient()
 
 local _print = print
 local function print(...)
@@ -92,7 +92,7 @@ local function takeNameFromPlayername(playername)
     for str in string.gmatch(playername, "([^"..'-'.."]+)") do
         table.insert(t, str)
     end
-    return t[1] or playername
+    return string.lower(t[1] or playername)
 end
 
 local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
@@ -229,7 +229,7 @@ local function spoofOTRWhisper(message, sender, isSender)
     end
 end
 
-function bignum_mod(a, b)
+local function bignum_mod(a, b)
     local q = BigNum.new()  -- quotient (discarded)
     local r = BigNum.new()  -- remainder (this is what we want)
     BigNum.div(a, b, q, r)
@@ -240,7 +240,7 @@ end
 local prime = BigNum.new("1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139") --138906510677011891929592526950652639230206605539989724821445378383957431108810776885337490647001125862737696358886844639523156958002155026797141586656698076850836605519143529711779461131498229669823806930874057768070744659329846993687078442187495466253952387056074335580898174981611057828352967545621549843561")
 local generator = BigNum.new("2")
 
-function modexp(base, exponent, modulus)
+local function modexp(base, exponent, modulus)
     local one = BigNum.new("1")
     local zero = BigNum.new("0")
     local two = BigNum.new("2")
@@ -265,7 +265,7 @@ end
 
 -- TODO: figure out proper RNG, or ATLEAST use
 -- something that is not predictable?
-function unsecureRandomBigNum(bits)
+local function unsecureRandomBigNum(bits)
     local digits = math.ceil(bits / 3.32)  -- log2(10) ≈ 3.32
     local s = {}
     table.insert(s, math.random(1, 9))
@@ -278,7 +278,7 @@ end
 
 
 -- Key generation (like Diffie-Hellman)
-function generateKeys()
+local function generateKeys()
    local priv = unsecureRandomBigNum(100) --unsecureRandomBigNum(1536) -- TODO: secure rng!!!
    local pub = modexp(generator, priv, prime)
    return pub, priv
@@ -345,6 +345,7 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
     local function pre_sendEncryptedMessage()
         -- check timeout
         local name = takeNameFromPlayername(channel)
+        --print("pre_send playerVersions['" .. name .. "'] =", playerVersions[name])
         if playerVersions[name] == nil then
             if debug then
                 print("Error, no ACK from " .. tostring(channel) .. " - E2EE DISABLED")
@@ -393,7 +394,7 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
     C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
     
     -- give 950 ms to accept a ACK?
-    C_Timer.After(0.95, pre_sendEncryptedMessage)
+    C_Timer.After(2, pre_sendEncryptedMessage)
 end
 
 local function OnCommandReceive(commMessage, distribution, sender, guid)
@@ -417,6 +418,7 @@ local function OnCommandReceive(commMessage, distribution, sender, guid)
         if res == nil then res = -1 end
         local name = takeNameFromPlayername(sender)
         playerVersions[name] = tonumber(res)
+        --print("SET playerVersions['" .. name .. "'] =", res)
     elseif opcode == "PUBK" then
         -- send PUBK ACK to let know we computing!
         local pubkeyAckMsg = string.format("PACK%04d", protocolVersion) 
@@ -489,7 +491,9 @@ end
 
 local panel = CreateFrame("Frame")
 panel.name = "OTRWhisper"               -- see panel fields
---InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
+if InterfaceOptions_AddCategory then
+    InterfaceOptions_AddCategory(panel)  -- see InterfaceOptions API
+end
 
 -- add widgets to the panel as desired
 local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
