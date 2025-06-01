@@ -1,3 +1,7 @@
+-- TODO: fix proper addon instead of _G
+-- TODO: fix settings and save keys maybe?
+-- TODO: extend key bit's bit over frames?
+-- TODO: pre generate a key so we can cache and reply instant?
 local addon = OTRWhisper
 
 local addonPrefix = "OTRWhisper" .. "P0C";
@@ -12,7 +16,7 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = IsGMClient()
+local debug = true -- IsGMClient()
 
 local _print = print
 local function print(...)
@@ -20,15 +24,20 @@ local function print(...)
 end
 
 -- poor symetric encryption
-local function encryptDecrypt(data, key)
+local function encryptCBC(data, key)
     local encrypted = ""
-    local keyLength = #key
+    local keyLength = 16 --#key
     local dataIndex = 1
+    
+    local iv = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
 
     for i = 1, #data do
         local byte = string.byte(data, i)
-        local keyByte = string.byte(key, dataIndex)
 
+        local ivByte = iv[dataIndex]
+        byte = bit.bxor(byte, ivByte)
+        iv[dataIndex] = byte
+        local keyByte = string.byte(key, dataIndex)
         local encryptedByte = bit.bxor(byte, keyByte)
         encrypted = encrypted .. string.char(encryptedByte)
 
@@ -40,14 +49,40 @@ local function encryptDecrypt(data, key)
 
     return encrypted
 end
+local function decryptCBC(data, key)
+    local decrypted = ""
+    local keyLength = 16
+    local dataIndex = 1
 
--- wrapper, soonTM
+    local iv = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88}
+
+    for i = 1, #data do
+        local encryptedByte = string.byte(data, i)
+        local keyByte = string.byte(key, dataIndex)
+        local byte = bit.bxor(encryptedByte, keyByte)
+        local ivByte = iv[dataIndex]
+        local originalByte = bit.bxor(byte, ivByte)
+        decrypted = decrypted .. string.char(originalByte)
+        iv[dataIndex] = byte
+
+        dataIndex = dataIndex + 1
+        if dataIndex > keyLength then
+            dataIndex = 1
+        end
+    end
+
+    return decrypted
+end
+
+-- TODO: look into https://github.com/Egor-Skriptunoff/pure_lua_SHA
 local function encrypt(string, key)
-   return encryptDecrypt(string, tostring(key))
+   local derivedKey = md5.sumhexa(tostring(key))
+   return encryptCBC(string, derivedKey)
 end
 
 local function decrypt(string, key)
-   return encryptDecrypt(string, tostring(key))
+    local derivedKey = md5.sumhexa(tostring(key))
+   return decryptCBC(string, derivedKey)
 end
 
 local function takeNameFromPlayername(playername)
@@ -386,7 +421,8 @@ local function OnCommandReceive(commMessage, distribution, sender, guid)
             print("Replied with PACK to", sender)
         end
         
-        C_Timer.After(3, function()
+        -- eh, next frame cuz why not?
+        C_Timer.After(0, function()
             local pubkeySender = string.sub(commMessage, 5)
 
             if debug then
