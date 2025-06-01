@@ -16,7 +16,7 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = true -- IsGMClient()
+local debug = IsGMClient()
 
 local _print = print
 local function print(...)
