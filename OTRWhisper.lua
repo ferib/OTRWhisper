@@ -117,7 +117,7 @@ local function SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
         end
 
         -- Add AFK/DND flags
-        local pflag = "<OTR>" --GetPFlag(arg6, arg7, arg8); -- NONE?
+        local pflag = "<|cff00FAF6OTR|r>" --GetPFlag(arg6, arg7, arg8); -- NONE?
 
         local showLink = 1;
         msg = gsub(msg, "%%", "%%%%");
@@ -201,6 +201,9 @@ local function spoofOTRWhisper(message, sender, isSender)
         -- make new frame if needed?
         local chatFrame = FCF_OpenTemporaryWindow("WHISPER", takeNameFromPlayername(sender));
         chatFrames[takeNameFromPlayername(sender)] = chatFrame -- NOTE tmp way to keep track of the frame?
+        
+        -- add a welcome msg?
+        SendOTRWhisperToFrame(chatFrame, "|cff00FAF6This chat is using end-to-end encryption!", sender, false)
         SendOTRWhisperToFrame(chatFrame, message, sender, isSender)
 
         if isSender then
@@ -218,7 +221,7 @@ local function spoofOTRWhisper(message, sender, isSender)
         local chatFrame = chatFrames[takeNameFromPlayername(sender)] -- FCFManager_GetChatTarget("WHISPER", sender, UnitName("player"))
         -- NOTE: there is no way to obtain the chat window from the `dedicatedWindows`?
         if chatFrame == nil then
-            print("[!] No chat whisper frame found!!")
+            print("Error, No chat whisper frame found!!")
             return
         end
 
@@ -303,7 +306,7 @@ local function GetKey(playername)
 end
 
 local pubkey, privkey = generateKeys()
-print("New keypair generated! (v" .. tostring(protocolVersion) .. ")")
+print("OTR Whispers only works with other v" .. tostring(protocolVersion) .. " users! (receiver must also install AddOn)")
 
 local _SendChatMessage = _G.SendChatMessage
 _G.SendChatMessage = function(msg, chatType, language, channel)
