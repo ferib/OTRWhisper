@@ -16,7 +16,7 @@ local chatFrames = {} -- temp?
 
 --Settings_FriendListOnly = false
 --Settings_ForceOTR = false
-local debug = true --IsGMClient()
+local debug = IsGMClient()
 
 local _print = print
 local function print(...)
@@ -310,13 +310,14 @@ print("OTR Whispers only works with other v" .. tostring(protocolVersion) .. " u
 
 local _SendChatMessage = _G.SendChatMessage
 _G.SendChatMessage = function(msg, chatType, language, channel)
+    -- NOTE channel can be nil ??
     -- skip if not Whisper. allow non-friend if already has key
     if chatType ~= "WHISPER" 
     or ( Settings_FriendListOnly and (C_FriendList.GetFriendInfo(channel) == nil 
         and not GetKey(channel)))
     then
         if debug then
-            print("Skip " .. chatType .. " for " .. channel)
+            print("Skip", chatType, "for", channel)
         end
         return _SendChatMessage(msg, chatType, language, channel)
     end 
@@ -397,7 +398,7 @@ _G.SendChatMessage = function(msg, chatType, language, channel)
     C_ChatInfo.SendAddonMessage(addonPrefix, addonmsg , "WHISPER", channel)
     
     -- give 950 ms to accept a ACK?
-    C_Timer.After(2, pre_sendEncryptedMessage)
+    C_Timer.After(0.9, pre_sendEncryptedMessage)
 end
 
 local function OnCommandReceive(commMessage, distribution, sender, guid)
