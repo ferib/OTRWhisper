@@ -1,9 +1,12 @@
 # Off-The-Record Whisper
 
-![OTRWhisper logo](./img/logo.png)
+![Asmongold react to gov. monitoring Wow](https://i.ytimg.com/vi/Ah3blDLWP-E/hq720.jpg?sqp=-oaymwEnCNAFEJQDSFryq4qpAxkIARUAAIhCGAHYAQHiAQoIGBACGAY4AUAB&rs=AOn4CLDUIKEuMYkYCJosKWuIkPqpVoO4gw)
 
 Off-The-Record Whisper or **OTRWhisper** is a Wow AddOn to provide a _(poorly)_ secure end-to-end encryption on in-game whisper chat messages.
 
+## But Why?
+
+This [YT video](https://www.youtube.com/watch?v=Ah3blDLWP-E), privacy, RP, ...
 
 ## Features
 
@@ -25,4 +28,4 @@ Just for fun, the asymmetric keys are done using Deffie Hellman key exchange wit
 
 Key deriviation is using `md5`⚠ ️but atleast its pure lua xD (TODO: sha256??)
 
-The symmetric encryption algorithm for encrypting/decryption the content of a message is done by a simple XOR loop. _(TODO: use something [from this list](https://github.com/philanc/plc#performance))_
+The symmetric encryption for message content is done by a very basic CBC block cypher using only a single XOR operation 😅
