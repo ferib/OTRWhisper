@@ -1,3 +1,5 @@
+local addon, OTR = ...
+
 local md5 = {
   _VERSION     = "md5.lua 1.1.0",
   _DESCRIPTION = "MD5 computation in Lua (5.1-3, LuaJIT)",
@@ -424,4 +426,4 @@ function md5.sumhexa(s)
   return md5.tohex(md5.sum(s))
 end
 
-_G.md5 = md5
+OTR.md5 = md5

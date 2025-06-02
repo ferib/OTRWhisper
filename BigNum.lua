@@ -1,3 +1,7 @@
+local addon, OTR = ...
+local BigNum = {}
+OTR.BigNum = BigNum
+
 --%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%{{{1
 --
 --  File Name:              bignum.lua
